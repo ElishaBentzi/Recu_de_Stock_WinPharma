@@ -1,13 +1,13 @@
 package com.example.reudestock
 
 import android.Manifest
-import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
-import android.content.ContentUris
+import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -43,167 +44,40 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.window.Dialog
 import java.io.OutputStream
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import java.io.File
+import com.hierynomus.smbj.SMBClient
+import com.hierynomus.mssmb2.SMB2CreateDisposition
+import com.hierynomus.smbj.auth.AuthenticationContext
+import com.hierynomus.smbj.connection.Connection
+import com.hierynomus.smbj.session.Session
+import com.hierynomus.smbj.share.DiskShare
+import com.hierynomus.msdtyp.AccessMask
+import com.hierynomus.mssmb2.SMB2ShareAccess
+import kotlinx.coroutines.CoroutineScope
+import java.io.ByteArrayOutputStream
 
 data class Product(val code: String, var quantity: Int)
 
-fun exportData(products: List<Product>, geo: String, outputStream: OutputStream){
-    val formattedGeo = geo.padEnd(9)
-    products.forEach { product ->
-        val formattedCode = product.code.padEnd(127)
-        val formattedQuantity = product.quantity.toString().padStart(4, '0')
-        outputStream.write(
-            "$formattedGeo;$formattedCode;$formattedQuantity; \r\n".toByteArray()
-        )
-    }
-}
-
 class MainActivity : ComponentActivity() {
-    private val requestWritePermission = 100
-    private var exportUri: Uri? = null
-    private var products by mutableStateOf<List<Product>>(emptyList())
-    private var geo by mutableStateOf("")
-    private val snackbarEvent = MutableSharedFlow<String>()
-
-    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-        if (isGranted) {
-            exportDataWithUri()
-        } else {
-            // Emitir evento para mostrar Snackbar
-            lifecycleScope.launch {
-                snackbarEvent.emit("Permission denied")
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AppContent(
-                productsInitial = products,
-                geo = geo,
-                updateGeo = { geo = it },
-                onExportLocalClick = { exportDataWithUri() },
-                onExportNetworkClick = { /* TODO: Implement network export */ },
-                snackbarEvent = snackbarEvent
-            )
+            AppContent(context = this, lifecycleScope = lifecycleScope)
         }
-        checkPermissions()
-    }
-
-    private fun startExportFlow() {
-        val filename = "STOCKDAT.TXT"
-        deleteExistingFileIfExists(filename)
-
-        val createIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TITLE, filename)
-        }
-        startActivityForResult(createIntent, 1)
-    }
-
-    private fun checkPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        } else {
-            startExportFlow()
-        }
-    }
-
-    @Deprecated("Deprecated in Java") override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == requestWritePermission) {
-            if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
-                startExportFlow()
-            } else {
-                lifecycleScope.launch {
-                    snackbarEvent.emit("Permiso de escritura negado")
-                }
-            }
-        }
-    }
-
-    private fun exportDataWithUri() {
-        exportUri?.let { uri ->
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    exportData(products, geo, outputStream)
-                    lifecycleScope.launch {
-                        snackbarEvent.emit("Archivo STOCKDAT.TXT exportado con éxito")
-                    }
-                }
-            } else {
-                requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
-    }
-
-    private fun deleteExistingFileIfExists(filename: String) {
-        val uri = findFileUri(filename)
-        if (uri != null) {
-            contentResolver.delete(uri, null, null)
-        }
-    }
-
-    private fun findFileUri(filename: String): Uri? {
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME
-        )
-        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ?"
-        val selectionArgs = arrayOf(filename)
-
-        val cursor = contentResolver.query(
-            MediaStore.Files.getContentUri("external"),
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )
-
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val id = it.getLong(it.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
-                return ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
-            }
-        }
-        return null
-    }
-}
-
-@Composable
-fun ShowSnackbarMessage(message: String, snackbarHostState: SnackbarHostState) {
-    // Lanzar Snackbar
-    LaunchedEffect(Unit) {
-        snackbarHostState.showSnackbar(
-            message = message
-        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppContent(
-    productsInitial: List<Product>,
-    geo: String,
-    updateGeo: (String) -> Unit,
-    onExportLocalClick: () -> Unit,
-    onExportNetworkClick: () -> Unit,
-    snackbarEvent: SharedFlow<String>
+    context: Context,
+    lifecycleScope: CoroutineScope
 ) {
-    var products by remember { mutableStateOf(productsInitial) }
+    var geo by remember { mutableStateOf("") }
+    val updateGeo: (String) -> Unit = { newValue -> geo = newValue }
+    var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     val focusManager = LocalFocusManager.current
     var barcode by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf(TextFieldValue("1")) }
@@ -218,8 +92,121 @@ fun AppContent(
     var modificarCantidad by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    val snackbarEvent = MutableSharedFlow<String>()
 
-    // Funciones movidas a AppContent
+    // Network export dialog state
+    var showNetworkExportDialog by remember { mutableStateOf(false) }
+    var networkIp by remember { mutableStateOf("192.168.1.100") }
+    var networkFolder by remember { mutableStateOf("SANNER") }
+    var networkLogin by remember { mutableStateOf("scanner") }
+    var networkPassword by remember { mutableStateOf("SCANNER") }
+
+    fun exportData(products: List<Product>, outputStream: OutputStream){
+        val formattedGeo = geo.padEnd(9)
+        products.forEach { product ->
+            val formattedCode = product.code.padEnd(127)
+            val formattedQuantity = product.quantity.toString().padStart(4, '0')
+            outputStream.write(
+                "$formattedGeo;$formattedCode;$formattedQuantity; \r\n".toByteArray()
+            )
+        }
+    }
+
+    @Composable
+    fun ShowSnackbarMessage(message: String, snackbarHostState: SnackbarHostState) {
+        LaunchedEffect(Unit) {
+            snackbarHostState.showSnackbar(
+                message = message
+            )
+        }
+    }
+
+    fun exportDataWithUri(uri: Uri) {
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            exportData(products, outputStream)
+            lifecycleScope.launch {
+                snackbarEvent.emit("Archivo STOCKDAT.TXT exportado con éxito")
+            }
+        }
+    }
+
+    fun deleteExistingFile(file: File) {
+        if (file.exists() && file.delete()) {
+            lifecycleScope.launch {
+                snackbarHostState.showSnackbar("Archivo STOCKDAT.TXT borrado con éxito")
+            }
+        }
+    }
+
+    fun startExportFlow() {
+        val filename = "STOCKDAT.TXT"
+        val file = File(context.getExternalFilesDir(null), filename)
+        Log.d("elisha", "File path: ${file.absolutePath}")
+        val exportUri = Uri.fromFile(file)
+        deleteExistingFile(file)
+        exportDataWithUri(exportUri)
+    }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            startExportFlow()
+        } else {
+            lifecycleScope.launch {
+                snackbarHostState.showSnackbar("Permiso denegado")
+            }
+        }
+    }
+
+    fun checkPermissions() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            // Permissions are already granted, start export flow
+            startExportFlow()
+        }
+    }
+
+    fun onExportNetworkClick(ip: String, folder: String, login: String, password: String) {
+        lifecycleScope.launch {
+            try {
+                val client = SMBClient()
+                val connection: Connection = client.connect(ip)
+                val authContext = AuthenticationContext(login, password.toCharArray(), null)
+                val session: Session = connection.authenticate(authContext)
+
+                // Assuming the share name is the same as the folder name
+                val share: DiskShare = session.connectShare(folder) as DiskShare
+
+                val outputStream = ByteArrayOutputStream()
+                exportData(products, outputStream)
+                val fileContent = outputStream.toByteArray()
+
+                share.openFile(
+                    "STOCKDAT.TXT",
+                    setOf(AccessMask.GENERIC_WRITE),
+                    null,
+                    setOf(SMB2ShareAccess.FILE_SHARE_WRITE), // Share Access
+                    SMB2CreateDisposition.FILE_OVERWRITE_IF, // Create Disposition
+                    null
+                ).use { file ->
+                    file.write(fileContent, 0)
+                }
+
+                share.close()
+                session.close()
+                connection.close()
+
+                snackbarEvent.emit("Archivo STOCKDAT.TXT exportado a la red con éxito")
+            } catch (e: Exception) {
+                snackbarEvent.emit("Error al exportar a la red: ${e.message}")
+            }
+        }
+    }
+
     fun startSingleUseTimer() {
         coroutineScope.launch {
             delay(500)
@@ -273,25 +260,68 @@ fun AppContent(
         }
     }
 
-    LaunchedEffect(Unit) {
+   LaunchedEffect(Unit) {
         barcodeFocusRequester.requestFocus()
-    }
+   }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(key1 = snackbarEvent) {
         snackbarEvent.collect { message ->
-            snackbarMessage = message
+            snackbarHostState.showSnackbar(message = message)
         }
     }
 
-    snackbarMessage?.let { message ->
-        ShowSnackbarMessage(message, snackbarHostState) // Llama a ShowSnackbarMessage dentro del contexto @Composable
-        // Resetear el mensaje del Snackbar después de mostrarlo
+    snackbarMessage?.let { message ->ShowSnackbarMessage(message, snackbarHostState)
         LaunchedEffect(Unit) {
             snackbarHostState.showSnackbar(
                 message = message
             )
             snackbarMessage = null
         }
+    }
+
+    if (showNetworkExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showNetworkExportDialog = false },
+            title = { Text("Exportar a la Red") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = networkIp,
+                        onValueChange = { networkIp = it },
+                        label = { Text("Dirección IP") }
+                    )
+                    OutlinedTextField(
+                        value = networkFolder,
+                        onValueChange = { networkFolder = it },
+                        label = { Text("Carpeta") }
+                    )
+                    OutlinedTextField(
+                        value = networkLogin,
+                        onValueChange = { networkLogin = it },
+                        label = { Text("Login") }
+                    )
+                    OutlinedTextField(
+                        value = networkPassword,
+                        onValueChange = { networkPassword = it },
+                        label = { Text("Contraseña") },
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onExportNetworkClick(networkIp, networkFolder, networkLogin, networkPassword)
+                    showNetworkExportDialog = false
+                }) {
+                    Text("Exportar")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showNetworkExportDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -324,14 +354,14 @@ fun AppContent(
                         DropdownMenuItem(
                             text = { Text("Exportar Datos Local") },
                             onClick = {
-                                onExportLocalClick()
+                                checkPermissions()
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
                             text = { Text("Exportar Datos Red") },
                             onClick = {
-                                onExportNetworkClick()
+                                showNetworkExportDialog = true
                                 showMenu = false
                             }
                         )
@@ -591,15 +621,11 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
 @Composable
 fun DefaultPreview() {
     MaterialTheme {
-        val products = remember { mutableStateListOf<Product>() }
-        val emptySnackbarEvent = MutableSharedFlow<String>()
+        val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
         AppContent(
-            products,
-            "1",
-            {},
-            {},
-            {},
-            emptySnackbarEvent
+            context = context,
+            lifecycleScope = coroutineScope,
         )
     }
 }
