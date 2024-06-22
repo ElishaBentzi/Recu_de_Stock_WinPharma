@@ -378,22 +378,50 @@ fun AppContent(
                 Column {
                     OutlinedTextField(
                         value = networkIp,
-                        onValueChange = { networkIp = it },
+                        onValueChange = {  newValue ->
+                            networkIp = newValue
+                            lifecycleScope.launch {
+                                dataStoreManager.updateNetworkSettings(
+                                    networkSettings.copy(networkIp = newValue)
+                                )
+                            }
+                        },
                         label = { Text("Dirección IP") }
                     )
                     OutlinedTextField(
                         value = networkFolder,
-                        onValueChange = { networkFolder = it },
+                        onValueChange = {  newValue ->
+                            networkFolder = newValue
+                            lifecycleScope.launch {
+                                dataStoreManager.updateNetworkSettings(
+                                    networkSettings.copy(networkFolder = newValue)
+                                )
+                            }
+                        },
                         label = { Text("Carpeta") }
                     )
                     OutlinedTextField(
                         value = networkLogin,
-                        onValueChange = { networkLogin = it },
+                        onValueChange = {  newValue ->
+                            networkLogin = newValue
+                            lifecycleScope.launch {
+                                dataStoreManager.updateNetworkSettings(
+                                    networkSettings.copy(networkLogin = newValue)
+                                )
+                            }
+                        },
                         label = { Text("Login") }
                     )
                     OutlinedTextField(
                         value = networkPassword,
-                        onValueChange = { networkPassword = it },
+                        onValueChange = {  newValue ->
+                            networkPassword = newValue
+                            lifecycleScope.launch {
+                                dataStoreManager.updateNetworkSettings(
+                                    networkSettings.copy(networkPassword = newValue)
+                                )
+                            }
+                        },
                         label = { Text("Contraseña") },
                         visualTransformation = PasswordVisualTransformation()
                     )
@@ -404,7 +432,7 @@ fun AppContent(
                     startExportNetworkFlow(networkIp, networkFolder, networkLogin, networkPassword)
                     showNetworkExportDialog = false
                 }) {
-                    Text("Guardar")
+                    Text("Exportar")
                 }
             },
             dismissButton = {
@@ -624,8 +652,10 @@ fun AppContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Total Productos: ${products.size}", fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                    Text("Total Cantidad: ${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Text("Total Productos: ", fontWeight = FontWeight.Bold)
+                    Text("${products.size}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("Total Cantidad: ", fontWeight = FontWeight.Bold)
+                    Text("${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
             }
 
@@ -662,6 +692,11 @@ fun AppContent(
                                 value = geo,
                                 onValueChange = { newValue ->
                                     geo = newValue.filter { it.isDigit() }
+                                    lifecycleScope.launch {
+                                        dataStoreManager.updateNetworkSettings(
+                                            networkSettings.copy(geo = geo)
+                                        )
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number) // Abrir teclado numérico
