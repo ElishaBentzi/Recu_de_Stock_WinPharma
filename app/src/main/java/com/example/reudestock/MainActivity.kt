@@ -139,7 +139,8 @@ fun AppContent(
     val snackbarEvent = MutableSharedFlow<String>()
 
     var showNetworkExportDialog by remember { mutableStateOf(false) }
-    
+
+    var dataStoreUpdateTrigger by remember { mutableIntStateOf(0) }
     val dataStoreManager = remember { DataStoreManager(context) }
     val networkSettings by dataStoreManager.networkSettingsFlow.collectAsState(initial = NetworkSettings())
 
@@ -287,7 +288,6 @@ fun AppContent(
         }
     }
 
-
     fun startSingleUseTimer() {
         coroutineScope.launch {
             delay(500)
@@ -361,6 +361,7 @@ fun AppContent(
                 geo = geo
             )
         )
+        dataStoreUpdateTrigger++
     }
 
     snackbarMessage?.let { message ->
@@ -380,11 +381,6 @@ fun AppContent(
                         value = networkIp,
                         onValueChange = {  newValue ->
                             networkIp = newValue
-                            lifecycleScope.launch {
-                                dataStoreManager.updateNetworkSettings(
-                                    networkSettings.copy(networkIp = newValue)
-                                )
-                            }
                         },
                         label = { Text("Dirección IP") }
                     )
@@ -392,11 +388,6 @@ fun AppContent(
                         value = networkFolder,
                         onValueChange = {  newValue ->
                             networkFolder = newValue
-                            lifecycleScope.launch {
-                                dataStoreManager.updateNetworkSettings(
-                                    networkSettings.copy(networkFolder = newValue)
-                                )
-                            }
                         },
                         label = { Text("Carpeta") }
                     )
@@ -404,11 +395,6 @@ fun AppContent(
                         value = networkLogin,
                         onValueChange = {  newValue ->
                             networkLogin = newValue
-                            lifecycleScope.launch {
-                                dataStoreManager.updateNetworkSettings(
-                                    networkSettings.copy(networkLogin = newValue)
-                                )
-                            }
                         },
                         label = { Text("Login") }
                     )
@@ -416,11 +402,6 @@ fun AppContent(
                         value = networkPassword,
                         onValueChange = {  newValue ->
                             networkPassword = newValue
-                            lifecycleScope.launch {
-                                dataStoreManager.updateNetworkSettings(
-                                    networkSettings.copy(networkPassword = newValue)
-                                )
-                            }
                         },
                         label = { Text("Contraseña") },
                         visualTransformation = PasswordVisualTransformation()
