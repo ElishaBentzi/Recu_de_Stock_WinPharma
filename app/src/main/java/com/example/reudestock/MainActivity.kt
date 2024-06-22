@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -166,16 +165,16 @@ fun AppContent(
             context.contentResolver.openOutputStream(uri, "wt")?.use { outputStream -> // "wt" para truncar y escribir
                 exportData(products, outputStream)
                 lifecycleScope.launch {
-                    snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado con éxito")
+                    snackbarEvent.emit("Fichier $STOCK_FILE_NAME exporté avec succès")
                 }
             } ?: run {
                 lifecycleScope.launch {
-                    snackbarEvent.emit("Error al abrir el archivo para exportación")
+                    snackbarEvent.emit("Erreur lors de l'ouverture du fichier pour l'exportation")
                 }
             }
         } catch (e: Exception) {
             lifecycleScope.launch {
-                snackbarEvent.emit("Error al exportar el archivo: ${e.message}")
+                snackbarEvent.emit("Erreur lors de l'exportation du fichier: ${e.message}")
             }
         }
     }
@@ -199,7 +198,6 @@ fun AppContent(
         createDocumentLauncher.launch(intent)
     }
 
-    // Función para validar la dirección IP (puedes implementar una validación más robusta)
     fun isValidIp(ip: String): Boolean {
         return ip.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"))
     }
@@ -208,35 +206,25 @@ fun AppContent(
         lifecycleScope.launch {
             withContext(Dispatchers.IO) { // <-- Ejecuta en un hilo secundario
                 try {
-                    // Validar entradas (por ejemplo, verificar que la IP es válida)
                     if (!isValidIp(ip)) {
                         withContext(Dispatchers.Main) {
-                            snackbarEvent.emit("Dirección IP inválida")
+                            snackbarEvent.emit("Adresse IP invalide")
                         }
                         return@withContext // <-- Retorna del bloque withContext
                     }
-                    Log.e("ExportNetwork", "Iniciando exportación a red...")
                     val client = SMBClient()
-                    // Extrae el nombre del equipo de la ruta completa
                     val serverName = folder.substringAfter("\\\\").substringBefore("\\")
-                    Log.e("ExportNetwork", "Conectando a servidor: $serverName")
-                    val connection: Connection = client.connect(ip) // Usamos serverName
+                    val connection: Connection = client.connect(ip) // Usamos IP podemos usar serverName
                     try {
-                        Log.e("ExportNetwork", "Autenticando...")
                         val authContext = AuthenticationContext(login, password.toCharArray(), null)
                         val session: Session = connection.authenticate(authContext)
-                        Log.e("ExportNetwork", "Conectado y autenticado.")
                         try {
-                            // Extrae el nombre del recurso compartido de la ruta completa
                             val shareName = folder.substringAfterLast("\\")
-                            Log.e("ExportNetwork", "Conectando a recurso compartido: $shareName")
                             val share: DiskShare = session.connectShare(shareName) as DiskShare
-                            Log.e("ExportNetwork", "Conectado al recurso compartido.")
                             try {
                                 val outputStream = ByteArrayOutputStream()
                                 exportData(products, outputStream)
                                 val fileContent = outputStream.toByteArray()
-                                Log.e("ExportNetwork", "Escribiendo archivo...")
                                 share.openFile(
                                     STOCK_FILE_NAME,
                                     setOf(AccessMask.GENERIC_WRITE),
@@ -246,45 +234,37 @@ fun AppContent(
                                 ).use { file ->
                                     file.write(fileContent, 0)
                                 }
-                                Log.e("ExportNetwork", "Archivo escrito con éxito.")
                                 // Usa withContext para emitir el evento en el hilo principal
                                 withContext(Dispatchers.Main) {
-                                    snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado a la red con éxito")
+                                    snackbarEvent.emit("Fichier $STOCK_FILE_NAME exporté vers le réseau avec succès")
                                 }
                             } catch (e: Exception) {
-                                Log.e("ExportNetwork", "Error al escribir el archivo: ${e.message}", e)
                                 withContext(Dispatchers.Main) {
-                                    snackbarEvent.emit("Error al escribir el archivo en el recurso compartido: ${e.message}")
+                                    snackbarEvent.emit("Erreur d'écriture du fichier à partager: ${e.message}")
                                 }
                             } finally {
                                 share.close()
-                                Log.e("ExportNetwork", "Recurso compartido cerrado.")
                             }
                         } catch (e: Exception) {
-                            Log.e("ExportNetwork", "Error al conectar al recurso compartido: ${e.message}", e)
                             withContext(Dispatchers.Main) {
-                                snackbarEvent.emit("Error al conectar al recurso compartido: ${e.message}")
+                                snackbarEvent.emit("Erreur de connexion au partage: ${e.message}")
                             }
                         } finally {
                             session.close()
-                            Log.e("ExportNetwork", "Sesión cerrada.")
                         }
                     } catch (e: Exception) {
-                        Log.e("ExportNetwork", "Error de autenticación: ${e.message}", e)
                         withContext(Dispatchers.Main) {
-                            snackbarEvent.emit("Error de autenticación: ${e.message}")
+                            snackbarEvent.emit("Erreur d'authentification: ${e.message}")
                         }
                     } finally {
                         connection.close()
-                        Log.e("ExportNetwork", "Conexión cerrada.")
                     }
                 } catch (e: Exception) {
-                    Log.e("ExportNetwork", "Error al conectar al servidor SMB: ${e.message}", e)
                     withContext(Dispatchers.Main) {
-                        snackbarEvent.emit("Error al conectar al servidor SMB: ${e.message}")
+                        snackbarEvent.emit("Erreur de connexion au serveur SMB: ${e.message}")
                     }
                 }
-            } // Fin del withContext(Dispatchers.IO)
+            }
         }
     }
 
@@ -374,7 +354,7 @@ fun AppContent(
     if (showNetworkExportDialog) {
         AlertDialog(
             onDismissRequest = { showNetworkExportDialog = false },
-            title = { Text("Exportar a la Red") },
+            title = { Text("Exporter vers le Réseau") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -382,14 +362,14 @@ fun AppContent(
                         onValueChange = {  newValue ->
                             networkIp = newValue
                         },
-                        label = { Text("Dirección IP") }
+                        label = { Text("Adresse IP") }
                     )
                     OutlinedTextField(
                         value = networkFolder,
                         onValueChange = {  newValue ->
                             networkFolder = newValue
                         },
-                        label = { Text("Carpeta") }
+                        label = { Text("Dossier") }
                     )
                     OutlinedTextField(
                         value = networkLogin,
@@ -403,7 +383,7 @@ fun AppContent(
                         onValueChange = {  newValue ->
                             networkPassword = newValue
                         },
-                        label = { Text("Contraseña") },
+                        label = { Text("Password") },
                         visualTransformation = PasswordVisualTransformation()
                     )
                 }
@@ -413,12 +393,12 @@ fun AppContent(
                     startExportNetworkFlow(networkIp, networkFolder, networkLogin, networkPassword)
                     showNetworkExportDialog = false
                 }) {
-                    Text("Exportar")
+                    Text("Exporter")
                 }
             },
             dismissButton = {
                 Button(onClick = { showNetworkExportDialog = false }) {
-                    Text("Cancelar")
+                    Text("Annuler")
                 }
             }
         )
@@ -438,42 +418,42 @@ fun AppContent(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Borrar Lista") },
+                            text = { Text("Supprimer la liste") },
                             onClick = {
                                 showDialog = true
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Valor Geo") },
+                            text = { Text("Valeur Geo") },
                             onClick = {
                                 showGeoDialog = true
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Datos Red") },
+                            text = { Text("Données Réseau") },
                             onClick = {
                                 showNetworkExportDialog = true
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Exportar Datos Local") },
+                            text = { Text("Exporter des Données Locales") },
                             onClick = {
                                 startExportLocalFlow()
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Exportar Datos Red") },
+                            text = { Text("Exporter les Données du Réseau") },
                             onClick = {
                                 startExportNetworkFlow(networkIp, networkFolder, networkLogin, networkPassword)
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (scaneoContinuo) "Desactivar Escaneo Continuo" else "Activar Escaneo Continuo") },
+                            text = { Text(if (scaneoContinuo) "Désactiver Scanner Continue" else "Activer Scanner Continue") },
                             onClick = {
                                 scaneoContinuo = !scaneoContinuo
                                 showMenu = false
@@ -514,7 +494,7 @@ fun AppContent(
                         barcode = newValue
                     }
                 },
-                label = { Text("Escanear/Ingresar Código de Barras") },
+                label = { Text("Scanner/Saisir le code-barres") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(barcodeFocusRequester)
@@ -549,7 +529,7 @@ fun AppContent(
                             val newQuantity = (filteredText.toIntOrNull() ?: 0).coerceAtMost(9999)
                             quantity = newValue.copy(text = newQuantity.toString())
                         },
-                        label = { Text("Cantidad") },
+                        label = { Text("Quantité") },
                         modifier = Modifier
                             .width(100.dp)
                             .focusRequester(quantityFocusRequester)
@@ -668,7 +648,7 @@ fun AppContent(
                 Dialog(onDismissRequest = { showGeoDialog = false }) {
                     Card {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Valor Geo")
+                            Text("Valeur Geo")
                             OutlinedTextField(
                                 value = geo,
                                 onValueChange = { newValue ->
@@ -684,7 +664,7 @@ fun AppContent(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { showGeoDialog = false }) {
-                                Text("Aceptar")
+                                Text("Accepter")
                             }
                         }
                     }
