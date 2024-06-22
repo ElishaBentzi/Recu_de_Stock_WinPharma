@@ -1,8 +1,8 @@
 package com.example.reudestock
 
-import android.Manifest
+import android.app.Activity
 import android.content.Context
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -38,7 +38,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.ui.window.Dialog
@@ -46,7 +45,6 @@ import java.io.OutputStream
 import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import java.io.File
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -56,6 +54,8 @@ import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 const val STOCK_FILE_NAME = "STOCKDAT.TXT"
@@ -77,7 +77,7 @@ fun AppContent(
     context: Context,
     lifecycleScope: CoroutineScope
 ) {
-    var geo by remember { mutableStateOf("") }
+    var geo by remember { mutableStateOf("1") }
     val updateGeo: (String) -> Unit = { newValue -> geo = newValue }
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     val focusManager = LocalFocusManager.current
@@ -98,8 +98,8 @@ fun AppContent(
 
     // Network export dialog state
     var showNetworkExportDialog by remember { mutableStateOf(false) }
-    var networkIp by remember { mutableStateOf("192.168.1.100") }
-    var networkFolder by remember { mutableStateOf("SANNER") }
+    var networkIp by remember { mutableStateOf("192.168.0.49") }
+    var networkFolder by remember { mutableStateOf("\\\\Nuc-intel\\scanner") }
     var networkLogin by remember { mutableStateOf("scanner") }
     var networkPassword by remember { mutableStateOf("SCANNER") }
 
@@ -124,93 +124,132 @@ fun AppContent(
     }
 
     fun exportDataWithUri(uri: Uri) {
-        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-            exportData(products, outputStream)
-            lifecycleScope.launch {
-                snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado con éxito")
+        try {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { outputStream -> // "wt" para truncar y escribir
+                exportData(products, outputStream)
+                lifecycleScope.launch {
+                    snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado con éxito")
+                }
+            } ?: run {
+                lifecycleScope.launch {
+                    snackbarEvent.emit("Error al abrir el archivo para exportación")
+                }
             }
-        } ?: run { // Si openOutputStream devuelve null
+        } catch (e: Exception) {
             lifecycleScope.launch {
-                snackbarEvent.emit("Error al abrir el archivo para exportación")
+                snackbarEvent.emit("Error al exportar el archivo: ${e.message}")
             }
         }
     }
 
-    fun deleteExistingFile(file: File) {
-        if (file.exists() && file.delete()) {
-            lifecycleScope.launch {
-                snackbarHostState.showSnackbar("Archivo $STOCK_FILE_NAME borrado con éxito")
+    val createDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                exportDataWithUri(uri)
             }
         }
     }
 
     fun startExportFlow() {
-        val file = File(context.getExternalFilesDir(null), STOCK_FILE_NAME)
-        Log.d("elisha", "File path: ${file.absolutePath}")
-        val exportUri = Uri.fromFile(file)
-        deleteExistingFile(file)
-        exportDataWithUri(exportUri)
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, STOCK_FILE_NAME)
+            // Agrega el flag para sobreescribir el archivo si existe
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        createDocumentLauncher.launch(intent)
     }
 
-    val requestPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            startExportFlow()
-        } else {
-            lifecycleScope.launch {
-                snackbarHostState.showSnackbar("Permiso denegado")
-            }
-        }
-    }
-
-    fun checkPermissions() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        } else {
-            // Permissions are already granted, start export flow
-            startExportFlow()
-        }
+    // Función para validar la dirección IP (puedes implementar una validación más robusta)
+    fun isValidIp(ip: String): Boolean {
+        return ip.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"))
     }
 
     fun onExportNetworkClick(ip: String, folder: String, login: String, password: String) {
         lifecycleScope.launch {
-            try {
-                val client = SMBClient()
-                val connection: Connection = client.connect(ip)
-                val authContext = AuthenticationContext(login, password.toCharArray(), null)
-                val session: Session = connection.authenticate(authContext)
-
-                // Assuming the share name is the same as the folder name
-                val share: DiskShare = session.connectShare(folder) as DiskShare
-
-                val outputStream = ByteArrayOutputStream()
-                exportData(products, outputStream)
-                val fileContent = outputStream.toByteArray()
-
-                share.openFile(
-                    STOCK_FILE_NAME,
-                    setOf(AccessMask.GENERIC_WRITE),
-                    null,
-                    setOf(SMB2ShareAccess.FILE_SHARE_WRITE), // Share Access
-                    SMB2CreateDisposition.FILE_OVERWRITE_IF, // Create Disposition
-                    null
-                ).use { file ->
-                    file.write(fileContent, 0)
+            withContext(Dispatchers.IO) { // <-- Ejecuta en un hilo secundario
+                try {
+                    // Validar entradas (porejemplo, verificar que la IP es válida)
+                    if (!isValidIp(ip)) {
+                        withContext(Dispatchers.Main) {
+                            snackbarEvent.emit("Dirección IP inválida")
+                        }
+                        return@withContext // <-- Retorna del bloque withContext
+                    }
+                    Log.e("ExportNetwork", "Iniciando exportación a red...")
+                    val client = SMBClient()
+                    // Extrae el nombre del equipo de la ruta completa
+                    val serverName = folder.substringAfter("\\\\").substringBefore("\\")
+                    Log.e("ExportNetwork", "Conectando a servidor: $serverName")
+                    val connection: Connection = client.connect(ip) // Usamos serverName
+                    try {
+                        Log.e("ExportNetwork", "Autenticando...")
+                        val authContext = AuthenticationContext(login, password.toCharArray(), null)
+                        val session: Session = connection.authenticate(authContext)
+                        Log.e("ExportNetwork", "Conectado y autenticado.")
+                        try {
+                            // Extrae el nombre del recurso compartido de la ruta completa
+                            val shareName = folder.substringAfterLast("\\")
+                            Log.e("ExportNetwork", "Conectando a recurso compartido: $shareName")
+                            val share: DiskShare = session.connectShare(shareName) as DiskShare
+                            Log.e("ExportNetwork", "Conectado al recurso compartido.")
+                            try {
+                                val outputStream = ByteArrayOutputStream()
+                                exportData(products, outputStream)
+                                val fileContent = outputStream.toByteArray()
+                                Log.e("ExportNetwork", "Escribiendo archivo...")
+                                share.openFile(
+                                    STOCK_FILE_NAME,
+                                    setOf(AccessMask.GENERIC_WRITE),
+                                    null,setOf(SMB2ShareAccess.FILE_SHARE_WRITE),
+                                    SMB2CreateDisposition.FILE_OVERWRITE_IF,
+                                    null
+                                ).use { file ->
+                                    file.write(fileContent, 0)
+                                }
+                                Log.e("ExportNetwork", "Archivo escrito con éxito.")
+                                // Usa withContext para emitir el evento en el hilo principal
+                                withContext(Dispatchers.Main) {
+                                    snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado a la red con éxito")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("ExportNetwork", "Error al escribir el archivo: ${e.message}", e)
+                                withContext(Dispatchers.Main) {
+                                    snackbarEvent.emit("Error al escribir el archivo en el recurso compartido: ${e.message}")
+                                }
+                            } finally {
+                                share.close()
+                                Log.e("ExportNetwork", "Recurso compartido cerrado.")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ExportNetwork", "Error al conectar al recurso compartido: ${e.message}", e)
+                            withContext(Dispatchers.Main) {
+                                snackbarEvent.emit("Error al conectar al recurso compartido: ${e.message}")
+                            }
+                        } finally {
+                            session.close()
+                            Log.e("ExportNetwork", "Sesión cerrada.")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ExportNetwork", "Error de autenticación: ${e.message}", e)
+                        withContext(Dispatchers.Main) {
+                            snackbarEvent.emit("Error de autenticación: ${e.message}")
+                        }
+                    } finally {
+                        connection.close()
+                        Log.e("ExportNetwork", "Conexión cerrada.")
+                    }
+                } catch (e: Exception) {
+                    Log.e("ExportNetwork", "Error al conectar al servidor SMB: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        snackbarEvent.emit("Error al conectar al servidor SMB: ${e.message}")
+                    }
                 }
-
-                share.close()
-                session.close()
-                connection.close()
-
-                snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado a la red con éxito")
-            } catch (e: Exception) {
-                snackbarEvent.emit("Error al exportar a la red: ${e.message}")
-            }
+            } // Fin del withContext(Dispatchers.IO)
         }
     }
+
 
     fun startSingleUseTimer() {
         coroutineScope.launch {
@@ -243,7 +282,7 @@ fun AppContent(
                     modificarCantidad = false
                     updatedProducts
                 } else {
-                    val increasedProducts = products.map { // Asigna el resultado de map a una variable
+                    val increasedProducts = products.map {
                         if (it == existingProduct) it.copy(
                             quantity = (it.quantity + quantityInt).coerceAtMost(
                                 9999
@@ -251,14 +290,14 @@ fun AppContent(
                         )
                         else it
                     }
-                    increasedProducts // Devuelve la lista con la cantidad aumentada
+                    increasedProducts
                 }
             } else if (quantityInt > 0) {
-                products + Product(code, quantityInt) // Añade el producto
+                products + Product(code, quantityInt)
             } else {
-                products // No hay cambios
+                products
             }
-            products = newProducts // Actualiza la variable de estado con la nueva lista
+            products = newProducts
             quantity = TextFieldValue("1")
             barcode = ""
             barcodeFocusRequester.requestFocus()
@@ -357,16 +396,23 @@ fun AppContent(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Datos Red") },
+                            onClick = {
+                                showNetworkExportDialog = true
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Exportar Datos Local") },
                             onClick = {
-                                checkPermissions()
+                                startExportFlow()
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
                             text = { Text("Exportar Datos Red") },
                             onClick = {
-                                showNetworkExportDialog = true
+                                onExportNetworkClick(networkIp, networkFolder, networkLogin, networkPassword)
                                 showMenu = false
                             }
                         )
