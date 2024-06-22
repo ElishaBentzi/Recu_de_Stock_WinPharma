@@ -58,9 +58,53 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
 const val STOCK_FILE_NAME = "STOCKDAT.TXT"
 
 data class Product(val code: String, var quantity: Int)
+data class NetworkSettings(
+    val networkIp: String = "192.168.0.49",
+    val networkFolder: String = "\\\\Nuc-intel\\scanner",
+    val networkLogin: String = "scanner",
+    val networkPassword: String = "SCANNER",
+    val geo: String = "1"
+)
+
+class DataStoreManager(private val context: Context) {
+    companion object {
+        private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "network_settings")
+        val NETWORK_IP_KEY = stringPreferencesKey("network_ip")
+        val NETWORK_FOLDER_KEY = stringPreferencesKey("network_folder")
+        val NETWORK_LOGIN_KEY = stringPreferencesKey("network_login")
+        val NETWORK_PASSWORD_KEY = stringPreferencesKey("network_password")
+        val GEO_KEY = stringPreferencesKey("geo")
+    }
+    val networkSettingsFlow: Flow<NetworkSettings> = context.dataStore.data.map { preferences ->
+        NetworkSettings(
+            networkIp = preferences[NETWORK_IP_KEY] ?: "192.168.0.49",
+            networkFolder = preferences[NETWORK_FOLDER_KEY] ?: "\\\\Nuc-intel\\scanner",
+            networkLogin = preferences[NETWORK_LOGIN_KEY] ?: "scanner",
+            networkPassword = preferences[NETWORK_PASSWORD_KEY] ?: "SCANNER",
+            geo = preferences[GEO_KEY] ?: "1"
+        )
+    }
+    suspend fun updateNetworkSettings(settings: NetworkSettings) {
+        context.dataStore.edit { preferences ->
+            preferences[NETWORK_IP_KEY] = settings.networkIp
+            preferences[NETWORK_FOLDER_KEY] = settings.networkFolder
+            preferences[NETWORK_LOGIN_KEY] = settings.networkLogin
+            preferences[NETWORK_PASSWORD_KEY] = settings.networkPassword
+            preferences[GEO_KEY] = settings.geo
+        }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,8 +121,6 @@ fun AppContent(
     context: Context,
     lifecycleScope: CoroutineScope
 ) {
-    var geo by remember { mutableStateOf("1") }
-    val updateGeo: (String) -> Unit = { newValue -> geo = newValue }
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     val focusManager = LocalFocusManager.current
     var barcode by remember { mutableStateOf("") }
@@ -96,12 +138,16 @@ fun AppContent(
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     val snackbarEvent = MutableSharedFlow<String>()
 
-    // Network export dialog state
     var showNetworkExportDialog by remember { mutableStateOf(false) }
-    var networkIp by remember { mutableStateOf("192.168.0.49") }
-    var networkFolder by remember { mutableStateOf("\\\\Nuc-intel\\scanner") }
-    var networkLogin by remember { mutableStateOf("scanner") }
-    var networkPassword by remember { mutableStateOf("SCANNER") }
+    
+    val dataStoreManager = remember { DataStoreManager(context) }
+    val networkSettings by dataStoreManager.networkSettingsFlow.collectAsState(initial = NetworkSettings())
+
+    var networkIp by remember { mutableStateOf(networkSettings.networkIp) }
+    var networkFolder by remember { mutableStateOf(networkSettings.networkFolder) }
+    var networkLogin by remember { mutableStateOf(networkSettings.networkLogin) }
+    var networkPassword by remember { mutableStateOf(networkSettings.networkPassword) }
+    var geo by remember { mutableStateOf(networkSettings.geo) }
 
     fun exportData(products: List<Product>, outputStream: OutputStream){
         val formattedGeo = geo.padEnd(9)
@@ -110,15 +156,6 @@ fun AppContent(
             val formattedQuantity = product.quantity.toString().padStart(4, '0')
             outputStream.write(
                 "$formattedGeo;$formattedCode;$formattedQuantity; \r\n".toByteArray()
-            )
-        }
-    }
-
-    @Composable
-    fun ShowSnackbarMessage(message: String, snackbarHostState: SnackbarHostState) {
-        LaunchedEffect(Unit) {
-            snackbarHostState.showSnackbar(
-                message = message
             )
         }
     }
@@ -150,7 +187,7 @@ fun AppContent(
         }
     }
 
-    fun startExportFlow() {
+    fun startExportLocalFlow() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "text/plain"
@@ -166,11 +203,11 @@ fun AppContent(
         return ip.matches(Regex("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"))
     }
 
-    fun onExportNetworkClick(ip: String, folder: String, login: String, password: String) {
+    fun startExportNetworkFlow(ip: String, folder: String, login: String, password: String) {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) { // <-- Ejecuta en un hilo secundario
                 try {
-                    // Validar entradas (porejemplo, verificar que la IP es válida)
+                    // Validar entradas (por ejemplo, verificar que la IP es válida)
                     if (!isValidIp(ip)) {
                         withContext(Dispatchers.Main) {
                             snackbarEvent.emit("Dirección IP inválida")
@@ -304,9 +341,9 @@ fun AppContent(
         }
     }
 
-   LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         barcodeFocusRequester.requestFocus()
-   }
+    }
 
     LaunchedEffect(key1 = snackbarEvent) {
         snackbarEvent.collect { message ->
@@ -314,11 +351,21 @@ fun AppContent(
         }
     }
 
-    snackbarMessage?.let { message ->ShowSnackbarMessage(message, snackbarHostState)
-        LaunchedEffect(Unit) {
-            snackbarHostState.showSnackbar(
-                message = message
+    LaunchedEffect(networkIp, networkFolder, networkLogin, networkPassword, geo) {
+        dataStoreManager.updateNetworkSettings(
+            NetworkSettings(
+                networkIp = networkIp,
+                networkFolder = networkFolder,
+                networkLogin = networkLogin,
+                networkPassword = networkPassword,
+                geo = geo
             )
+        )
+    }
+
+    snackbarMessage?.let { message ->
+        LaunchedEffect(Unit) {
+            snackbarHostState.showSnackbar(message = message)
             snackbarMessage = null
         }
     }
@@ -354,10 +401,10 @@ fun AppContent(
             },
             confirmButton = {
                 Button(onClick = {
-                    onExportNetworkClick(networkIp, networkFolder, networkLogin, networkPassword)
+                    startExportNetworkFlow(networkIp, networkFolder, networkLogin, networkPassword)
                     showNetworkExportDialog = false
                 }) {
-                    Text("Exportar")
+                    Text("Guardar")
                 }
             },
             dismissButton = {
@@ -405,14 +452,14 @@ fun AppContent(
                         DropdownMenuItem(
                             text = { Text("Exportar Datos Local") },
                             onClick = {
-                                startExportFlow()
+                                startExportLocalFlow()
                                 showMenu = false
                             }
                         )
                         DropdownMenuItem(
                             text = { Text("Exportar Datos Red") },
                             onClick = {
-                                onExportNetworkClick(networkIp, networkFolder, networkLogin, networkPassword)
+                                startExportNetworkFlow(networkIp, networkFolder, networkLogin, networkPassword)
                                 showMenu = false
                             }
                         )
@@ -577,8 +624,8 @@ fun AppContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Total Productos: ${products.size}", fontWeight = FontWeight.Bold)
-                    Text("Total Cantidad: ${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold)
+                    Text("Total Productos: ${products.size}", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Text("Total Cantidad: ${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 }
             }
 
@@ -613,8 +660,11 @@ fun AppContent(
                             Text("Valor Geo")
                             OutlinedTextField(
                                 value = geo,
-                                onValueChange = updateGeo,
-                                modifier = Modifier.fillMaxWidth()
+                                onValueChange = { newValue ->
+                                    geo = newValue.filter { it.isDigit() }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number) // Abrir teclado numérico
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { showGeoDialog = false }) {

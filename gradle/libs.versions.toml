@@ -1,5 +1,6 @@
 [versions]
 smbj = "0.13.0"
+datastore = "1.1.1"
 agp = "8.5.0"
 kotlin = "2.0.0"
 kotlinx-coroutines-android = "1.8.1"
@@ -18,6 +19,7 @@ googleAndroidLibrariesMapsplatformSecretsGradlePlugin = "2.0.1"
 smbj = { module = "com.hierynomus:smbj", version.ref = "smbj" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinx-coroutines-android" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
