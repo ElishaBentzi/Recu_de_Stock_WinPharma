@@ -58,6 +58,8 @@ import com.hierynomus.mssmb2.SMB2ShareAccess
 import kotlinx.coroutines.CoroutineScope
 import java.io.ByteArrayOutputStream
 
+const val STOCK_FILE_NAME = "STOCKDAT.TXT"
+
 data class Product(val code: String, var quantity: Int)
 
 class MainActivity : ComponentActivity() {
@@ -125,7 +127,11 @@ fun AppContent(
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
             exportData(products, outputStream)
             lifecycleScope.launch {
-                snackbarEvent.emit("Archivo STOCKDAT.TXT exportado con éxito")
+                snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado con éxito")
+            }
+        } ?: run { // Si openOutputStream devuelve null
+            lifecycleScope.launch {
+                snackbarEvent.emit("Error al abrir el archivo para exportación")
             }
         }
     }
@@ -133,14 +139,13 @@ fun AppContent(
     fun deleteExistingFile(file: File) {
         if (file.exists() && file.delete()) {
             lifecycleScope.launch {
-                snackbarHostState.showSnackbar("Archivo STOCKDAT.TXT borrado con éxito")
+                snackbarHostState.showSnackbar("Archivo $STOCK_FILE_NAME borrado con éxito")
             }
         }
     }
 
     fun startExportFlow() {
-        val filename = "STOCKDAT.TXT"
-        val file = File(context.getExternalFilesDir(null), filename)
+        val file = File(context.getExternalFilesDir(null), STOCK_FILE_NAME)
         Log.d("elisha", "File path: ${file.absolutePath}")
         val exportUri = Uri.fromFile(file)
         deleteExistingFile(file)
@@ -186,7 +191,7 @@ fun AppContent(
                 val fileContent = outputStream.toByteArray()
 
                 share.openFile(
-                    "STOCKDAT.TXT",
+                    STOCK_FILE_NAME,
                     setOf(AccessMask.GENERIC_WRITE),
                     null,
                     setOf(SMB2ShareAccess.FILE_SHARE_WRITE), // Share Access
@@ -200,7 +205,7 @@ fun AppContent(
                 session.close()
                 connection.close()
 
-                snackbarEvent.emit("Archivo STOCKDAT.TXT exportado a la red con éxito")
+                snackbarEvent.emit("Archivo $STOCK_FILE_NAME exportado a la red con éxito")
             } catch (e: Exception) {
                 snackbarEvent.emit("Error al exportar a la red: ${e.message}")
             }
