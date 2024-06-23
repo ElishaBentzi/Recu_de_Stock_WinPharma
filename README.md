@@ -13,6 +13,7 @@ Steps:
 4- Scan and enjoy.
 
 The App is designed for fast scanning with optional continius scanning functionality, developed in Android Studio with languaje Kotlin target Android 10+.
+
 ---------------- Français -------------------------
 Application de Réception de Produits adaptée aux spécifications du logiciel WinPharma pour les Pharmacies de France. Le code peut être adapté à des applications similaires où un fichier avec un format doit être produit et envoyé vers un dossier réseau partagé sous Windows (SMB). Depuis le dossier Windows, WinPharma peut télécharger la réception des produits depuis l'application.
 
