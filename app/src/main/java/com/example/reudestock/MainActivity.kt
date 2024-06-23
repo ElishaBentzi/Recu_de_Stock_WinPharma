@@ -65,7 +65,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-const val STOCK_FILE_NAME = "STOCKDAT.TXT"
+
 
 data class Product(val code: String, var quantity: Int)
 
@@ -75,6 +75,7 @@ object NetworkDefaults {
     const val LOGIN = "scanner"
     const val PASSWORD = "SCANNER"
     const val GEO = "1"
+    const val STOCK_FILE_NAME = "STOCKDAT.TXT"
 }
 
 data class NetworkSettings(
@@ -82,7 +83,8 @@ data class NetworkSettings(
     val networkFolder: String = NetworkDefaults.FOLDER,
     val networkLogin: String = NetworkDefaults.LOGIN,
     val networkPassword: String = NetworkDefaults.PASSWORD,
-    val geo: String = NetworkDefaults.GEO
+    val geo: String = NetworkDefaults.GEO,
+    val stockFileName: String = NetworkDefaults.STOCK_FILE_NAME
 )
 
 class DataStoreManager(private val context: Context) {
@@ -93,6 +95,7 @@ class DataStoreManager(private val context: Context) {
         val NETWORK_LOGIN_KEY = stringPreferencesKey("network_login")
         val NETWORK_PASSWORD_KEY = stringPreferencesKey("network_password")
         val GEO_KEY = stringPreferencesKey("geo")
+        val STOCK_FILE_NAME_KEY = stringPreferencesKey("stockFileName")
     }
 
     val networkSettingsFlow: Flow<NetworkSettings> = context.dataStore.data.map { preferences ->
@@ -101,7 +104,8 @@ class DataStoreManager(private val context: Context) {
             networkFolder = preferences[NETWORK_FOLDER_KEY] ?: NetworkDefaults.FOLDER,
             networkLogin = preferences[NETWORK_LOGIN_KEY] ?: NetworkDefaults.LOGIN,
             networkPassword = preferences[NETWORK_PASSWORD_KEY] ?: NetworkDefaults.PASSWORD,
-            geo = preferences[GEO_KEY] ?: NetworkDefaults.GEO
+            geo = preferences[GEO_KEY] ?: NetworkDefaults.GEO,
+            stockFileName = preferences[STOCK_FILE_NAME_KEY] ?: NetworkDefaults.STOCK_FILE_NAME
         )
     }
 
@@ -112,6 +116,7 @@ class DataStoreManager(private val context: Context) {
             preferences[NETWORK_LOGIN_KEY] = settings.networkLogin
             preferences[NETWORK_PASSWORD_KEY] = settings.networkPassword
             preferences[GEO_KEY] = settings.geo
+            preferences[STOCK_FILE_NAME_KEY] = settings.stockFileName
         }
     }
 }
@@ -135,7 +140,7 @@ fun AppContent(
     val focusManager = LocalFocusManager.current
     var barcode by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf(TextFieldValue("1")) }
-    var showDialog by remember { mutableStateOf(false) }
+    var showBorrarDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showGeoDialog by remember { mutableStateOf(false) }
     var scaneoContinuo by remember { mutableStateOf(true) }
@@ -175,7 +180,7 @@ fun AppContent(
             context.contentResolver.openOutputStream(uri, "wt")?.use { outputStream -> // "wt" para truncar y escribir
                 exportData(products, outputStream)
                 lifecycleScope.launch {
-                    snackbarEvent.emit("Fichier $STOCK_FILE_NAME exporté avec succès")
+                    snackbarEvent.emit("Fichier ${networkSettings.stockFileName} exporté avec succès")
                 }
             } ?: run {
                 lifecycleScope.launch {
@@ -201,7 +206,7 @@ fun AppContent(
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "text/plain"
-            putExtra(Intent.EXTRA_TITLE, STOCK_FILE_NAME)
+            putExtra(Intent.EXTRA_TITLE, networkSettings.stockFileName)
             // Agrega el flag para sobreescribir el archivo si existe
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         }
@@ -236,7 +241,7 @@ fun AppContent(
                                 exportData(products, outputStream)
                                 val fileContent = outputStream.toByteArray()
                                 share.openFile(
-                                    STOCK_FILE_NAME,
+                                    networkSettings.stockFileName,
                                     setOf(AccessMask.GENERIC_WRITE),
                                     null,setOf(SMB2ShareAccess.FILE_SHARE_WRITE),
                                     SMB2CreateDisposition.FILE_OVERWRITE_IF,
@@ -246,7 +251,7 @@ fun AppContent(
                                 }
                                 // Usa withContext para emitir el evento en el hilo principal
                                 withContext(Dispatchers.Main) {
-                                    snackbarEvent.emit("Fichier $STOCK_FILE_NAME exporté vers le réseau avec succès")
+                                    snackbarEvent.emit("Fichier ${networkSettings.stockFileName} exporté vers le réseau avec succès")
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
@@ -359,6 +364,7 @@ fun AppContent(
                         onValueChange = { newValue ->
                             updateNetworkSettings(networkSettings.copy(networkIp = newValue))
                         },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         label = { Text("Adresse IP") }
                     )
                     OutlinedTextField(
@@ -382,6 +388,13 @@ fun AppContent(
                         },
                         label = { Text("Password") },
                         visualTransformation = PasswordVisualTransformation()
+                    )
+                    OutlinedTextField(
+                        value = networkSettings.stockFileName,
+                        onValueChange = { newValue ->
+                            updateNetworkSettings(networkSettings.copy(stockFileName = newValue))
+                        },
+                        label = { Text("Fichier") }
                     )
                 }
             },
@@ -422,7 +435,7 @@ fun AppContent(
                         DropdownMenuItem(
                             text = { Text("Supprimer la liste") },
                             onClick = {
-                                showDialog = true
+                                showBorrarDialog = true
                                 showMenu = false
                             }
                         )
@@ -448,9 +461,13 @@ fun AppContent(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Exporter les Données du Réseau") },
+                            text = { Text("Exporter les Données du Réseau", color = Color.Blue) },
                             onClick = {
-                                startExportNetworkFlow(networkSettings.networkIp, networkSettings.networkFolder, networkSettings.networkLogin, networkSettings.networkPassword)
+                                startExportNetworkFlow(
+                                    networkSettings.networkIp,
+                                    networkSettings.networkFolder,
+                                    networkSettings.networkLogin,
+                                    networkSettings.networkPassword)
                                 showMenu = false
                             }
                         )
@@ -550,18 +567,28 @@ fun AppContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(onClick = {
-                        val newQuantity = ((quantity.text.toIntOrNull() ?: 0) + 1).coerceAtMost(9999)
-                        quantity = TextFieldValue(newQuantity.toString())
-                    }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Aumentar Cantidad")
-                    }
-                    IconButton(onClick = {
-                        val newQuantity = (quantity.text.toIntOrNull() ?: 0) - 1
-                        quantity = if (newQuantity >= 0) TextFieldValue(newQuantity.toString()) else TextFieldValue("0")
-                    }) {
-                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Disminuir Cantidad")
-                    }
+                    Text(
+                        text = "  +  ",
+                        modifier = Modifier
+                            .clickable {
+                                val newQuantity = ((quantity.text.toIntOrNull() ?: 0)+ 1).coerceAtMost(9999)
+                                quantity = TextFieldValue(newQuantity.toString())
+                            },
+                        fontSize = 32.sp,
+                        color = Color.Magenta,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "  -  ",
+                        modifier = Modifier
+                            .clickable {
+                                val newQuantity = (quantity.text.toIntOrNull() ?: 0) - 1
+                                quantity = if (newQuantity >= 0) TextFieldValue(newQuantity.toString()) else TextFieldValue("0")
+                            },
+                        fontSize = 38.sp,
+                        color = Color.Magenta,
+                        fontWeight = FontWeight.Bold
+                    )
                     IconButton(onClick = {
                         agregarProducto()
                     }){
@@ -609,35 +636,33 @@ fun AppContent(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-
-                // Totales
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Total Productos: ", fontWeight = FontWeight.Bold)
-                    Text("${products.size}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text("Total Cantidad: ", fontWeight = FontWeight.Bold)
-                    Text("${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("Total Produits: ", fontWeight = FontWeight.Bold)
+                    Text("${products.size}", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Magenta)
+                    Text("Total Quantité: ", fontWeight = FontWeight.Bold)
+                    Text("${products.sumOf { it.quantity }}", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Blue)
                 }
             }
 
             // Diálogo de confirmación para borrar lista
-            if (showDialog) {
+            if (showBorrarDialog) {
                 AlertDialog(
-                    onDismissRequest = { showDialog = false },
+                    onDismissRequest = { showBorrarDialog = false },
                     title = { Text("Confirmation de la Suppression") },
                     text = { Text("Êtes-vous sûr de vouloir supprimer la liste de produits?") },
                     confirmButton = {
                         Button(onClick = {
                             products = emptyList()
-                            showDialog = false
+                            showBorrarDialog = false
                         }) {
                             Text("Supprimer")
                         }
                     },
                     dismissButton = {
-                        Button(onClick = { showDialog = false }) {
+                        Button(onClick = { showBorrarDialog = false }) {
                             Icon(imageVector = Icons.Filled.Clear, contentDescription = null)
                             Spacer(Modifier.size(ButtonDefaults.IconSpacing))
                             Text("Annuler")
@@ -654,10 +679,9 @@ fun AppContent(
                             OutlinedTextField(
                                 value = networkSettings.geo,
                                 onValueChange = { newValue ->
-                                    updateNetworkSettings(networkSettings.copy(geo = newValue.filter { it.isDigit() }))
+                                    updateNetworkSettings(networkSettings.copy(geo = newValue))
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number) // Abrir teclado numérico
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { showGeoDialog = false }) {
@@ -677,8 +701,7 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp, vertical = 2.dp)
-            .height(18.dp)
-            .clickable { onEditClick(product) },
+            .height(18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -689,6 +712,10 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
         )
         Text(
             text = "x${product.quantity}",
+            modifier = Modifier
+                .clickable {
+                    onEditClick(product)
+                },
             color = Color.Blue,
             fontSize = 20.sp
         )
