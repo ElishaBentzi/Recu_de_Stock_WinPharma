@@ -14,6 +14,8 @@ Steps:
 
 The App is designed for fast scanning with optional continius scanning functionality, developed in Android Studio with languaje Kotlin target Android 10+.
 
+Download the App from here: https://github.com/ElishaBentzi/Recu_de_Stock_WinPharma/blob/master/app/release/app-release.apk
+
 ---------------- Français -------------------------
 
 Application de Réception de Produits adaptée aux spécifications du logiciel WinPharma pour les Pharmacies de France. Le code peut être adapté à des applications similaires où un fichier avec un format doit être produit et envoyé vers un dossier réseau partagé sous Windows (SMB). Depuis le dossier Windows, WinPharma peut télécharger la réception des produits depuis l'application.
@@ -29,3 +31,5 @@ Pas:
 4- Scannez et profitez-en.
 
 L'application est conçue pour une analyse rapide avec une fonctionnalité d'analyse continue en option, développée dans Android Studio avec la cible du langage Kotlin Android 10+.
+
+Téléchargez l'application à partir d'ici : https://github.com/ElishaBentzi/Recu_de_Stock_WinPharma/blob/master/app/release/app-release.apk
