@@ -56,6 +56,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -227,6 +229,7 @@ fun AppContent(
                         }
                         return@withContext // <-- Retorna del bloque withContext
                     }
+                    // Connect to the network share
                     val client = SMBClient()
                     val serverName = folder.substringAfter("\\\\").substringBefore("\\")
                     val connection: Connection = client.connect(ip) // Usamos IP podemos usar serverName
@@ -249,6 +252,31 @@ fun AppContent(
                                 ).use { file ->
                                     file.write(fileContent, 0)
                                 }
+
+                                // Crea la subcarpeta 'log' si no existe
+                                val logFolderPath = "$shareName/log"
+                                val logFolder = share.folderExists(logFolderPath)
+                                if (!logFolder) {
+                                    share.mkdir(logFolderPath)
+                                }
+
+                                // Genera el nombre de archivo con marca de tiempo
+                                val timestamp = LocalDateTime.now()
+                                    .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                                val timestampedFilename = "STOCKDAT-$timestamp.TXT"
+
+                                // Escribe los datos en el archivo con marca de tiempo en la subcarpeta 'log'
+                                val timestampedFilePath = "$logFolderPath/$timestampedFilename"
+                                share.openFile(
+                                    timestampedFilePath,
+                                    setOf(AccessMask.GENERIC_WRITE),
+                                    null, setOf(SMB2ShareAccess.FILE_SHARE_WRITE),
+                                    SMB2CreateDisposition.FILE_OVERWRITE_IF,
+                                    null
+                                ).use { file ->
+                                    file.write(fileContent, 0)
+                                }
+
                                 // Usa withContext para emitir el evento en el hilo principal
                                 withContext(Dispatchers.Main) {
                                     snackbarEvent.emit("Fichier ${networkSettings.stockFileName} exporté vers le réseau avec succès")
