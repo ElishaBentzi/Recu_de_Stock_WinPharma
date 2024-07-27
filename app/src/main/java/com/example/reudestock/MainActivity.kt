@@ -254,7 +254,7 @@ fun AppContent(
                                 }
 
                                 // Crea la subcarpeta 'log' si no existe
-                                val logFolderPath = "$shareName/log"
+                                val logFolderPath = "log"
                                 val logFolder = share.folderExists(logFolderPath)
                                 if (!logFolder) {
                                     share.mkdir(logFolderPath)
