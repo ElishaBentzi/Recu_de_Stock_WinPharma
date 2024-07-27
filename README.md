@@ -4,7 +4,7 @@ Application de Réception de Produits adaptée aux spécifications du logiciel W
 
 Problème : Opticon et d'autres marques de lecteurs de codes à barres sont anciens, coûteux, lents, ne lisent pas les nouveaux codes à barres et nécessitent une programmation spéciale pour produire le format de fichier dont WinPharma a besoin.
 
-Solution : Utilisez un téléphone Android pas cher (version 10 ou plus), achetez un lecteur code barre Bluetooth, par exemple : https://www.amazon.fr/NETUM-Code-Barres-Automatique-Fonctionne-E900/dp/B0CBJHNZFV/ ref=sr_1_3_sspa
+Solution : Utilisez un téléphone Android pas cher (version 10 ou plus), achetez un lecteur code barre Bluetooth, par exemple : [https://www.amazon.fr/NETUM-Code-Barres-Automatique-Fonctionne-E900/dp/B0CBJHNZFV/ ref=sr_1_3_sspa](https://www.amazon.fr/NETUM-E950-2D-Barcode-Scanner-QR-Barcode-Leser-Pistolen-Scan-R%C3%BCckenclip/dp/B0CD41J8FX/)
 
 Pas:
 1- Partagez un dossier sur votre ordinateur serveur avec WinPharma, instructions pour partager un dossier ici : https://www.makeuseof.com/access-pc-files-ios-android-windows-network-share/
@@ -23,7 +23,7 @@ Application for Reception of Products tailored to the specifications of software
 
 Problem: opticon and other brands of bar code readers are old, expensive, slow, dont read new bar codes, and need special programming to produce the file format as WinPharma need.
 
-Solution: Use a cheap Android Phone ( release 10 or more), buy a bluettooth bar code reader, by example: https://www.amazon.fr/NETUM-Code-Barres-Automatique-Fonctionne-E900/dp/B0CBJHNZFV/ref=sr_1_3_sspa
+Solution: Use a cheap Android Phone ( release 10 or more), buy a bluettooth bar code reader, by example: [https://www.amazon.fr/NETUM-Code-Barres-Automatique-Fonctionne-E900/dp/B0CBJHNZFV/ref=sr_1_3_sspa](https://www.amazon.fr/NETUM-E950-2D-Barcode-Scanner-QR-Barcode-Leser-Pistolen-Scan-R%C3%BCckenclip/dp/B0CD41J8FX/)
 
 Steps:
 1- Share a folder in your Computer Server with WinPharma, instruccions of how to share a folder here: https://www.makeuseof.com/access-pc-files-ios-android-windows-network-share/
