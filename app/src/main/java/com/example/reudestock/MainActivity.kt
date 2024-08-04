@@ -729,13 +729,13 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp, vertical = 2.dp)
-            .height(18.dp),
+            .height(24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = product.code,
             modifier = Modifier.weight(1f),
-            fontSize = 18.sp,
+            fontSize = 24.sp,
             color = Color.Black
         )
         Text(
@@ -745,13 +745,13 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
                     onEditClick(product)
                 },
             color = Color.Blue,
-            fontSize = 20.sp
+            fontSize = 26.sp
         )
         IconButton(onClick = { onEditClick(product) }) {
             Icon(
                 Icons.Filled.Edit,
                 contentDescription = "Editar",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(24.dp),
                 tint = Color.Magenta
             )
         }
@@ -759,7 +759,7 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
             Icon(
                 Icons.Filled.Delete,
                 contentDescription = "Eliminar",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(24.dp),
                 tint = Color.Red
             )
         }
