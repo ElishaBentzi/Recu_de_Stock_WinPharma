@@ -152,7 +152,6 @@ fun AppContent(
     val coroutineScope = rememberCoroutineScope()
     var modificarCantidad by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    var snackbarMessage by remember { mutableStateOf<String?>(null) }
     val snackbarEvent = MutableSharedFlow<String>()
 
     var showNetworkExportDialog by remember { mutableStateOf(false) }
@@ -280,6 +279,7 @@ fun AppContent(
                                 // Usa withContext para emitir el evento en el hilo principal
                                 withContext(Dispatchers.Main) {
                                     snackbarEvent.emit("Fichier ${networkSettings.stockFileName} exporté vers le réseau avec succès")
+                                    showBorrarDialog = true
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
@@ -370,14 +370,7 @@ fun AppContent(
 
     LaunchedEffect(key1 = snackbarEvent) {
         snackbarEvent.collect { message ->
-            snackbarHostState.showSnackbar(message = message)
-        }
-    }
-
-    snackbarMessage?.let { message ->
-        LaunchedEffect(Unit) {
-            snackbarHostState.showSnackbar(message = message)
-            snackbarMessage = null
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Long)
         }
     }
 
@@ -639,6 +632,7 @@ fun AppContent(
                 ) {
                     itemsIndexed(products.reversed()) { index, product ->
                         val color = colors[index % colors.size]
+                        var showDeleteConfirmation by remember { mutableStateOf(false) }
                         Column(
                             modifier = Modifier
                                 .padding(horizontal = 0.dp, vertical = 0.dp)
@@ -657,7 +651,8 @@ fun AppContent(
                                 }, onDeleteClick = { productToDelete ->
                                     val newProducts = products.filter { it != productToDelete } // Usa productToDelete en el filtro
                                     products = newProducts
-                                }
+                                },
+                                showDeleteConfirmation = remember{ mutableStateOf(false)}
                             )
                         }
                     }
@@ -679,7 +674,7 @@ fun AppContent(
             if (showBorrarDialog) {
                 AlertDialog(
                     onDismissRequest = { showBorrarDialog = false },
-                    title = { Text("Confirmation de la Suppression") },
+                    title = { Text("Confirmation de Suppression de la Liste") },
                     text = { Text("Êtes-vous sûr de vouloir supprimer la liste de produits?") },
                     confirmButton = {
                         Button(onClick = {
@@ -724,7 +719,35 @@ fun AppContent(
 }
 
 @Composable
-fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick: (Product) -> Unit) {
+fun ProductItem(
+    product: Product,
+    onEditClick: (Product) -> Unit,
+    onDeleteClick: (Product) -> Unit,
+    showDeleteConfirmation: MutableState<Boolean>
+) {
+    if (showDeleteConfirmation.value) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation.value = false },
+            title = { Text("Confirmation de la Suppression")},
+            text = { Text(product.code, fontSize = 24.sp, color = Color.Red)
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onDeleteClick(product)
+                    showDeleteConfirmation.value = false
+                }) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDeleteConfirmation.value = false }) {
+                    Icon(imageVector = Icons.Filled.Clear, contentDescription = null)
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text( "Annuler")}
+            }
+        )
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -755,7 +778,7 @@ fun ProductItem(product: Product, onEditClick: (Product) -> Unit, onDeleteClick:
                 tint = Color.Magenta
             )
         }
-        IconButton(onClick = { onDeleteClick(product) }) {
+        IconButton(onClick = { showDeleteConfirmation.value = true }) {
             Icon(
                 Icons.Filled.Delete,
                 contentDescription = "Eliminar",
